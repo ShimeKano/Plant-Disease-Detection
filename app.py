@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 import streamlit as st
 import numpy as np
 import tensorflow as tf
@@ -9,7 +12,10 @@ st.title("🌱 Plant Disease AI")
 st.caption("Nhận diện 15 nhóm tình trạng bệnh trên cà chua, khoai tây và ớt chuông.")
 
 IMG_SIZE = 128
-MODEL_PATH = "model/best_model.h5"
+MODEL_DIR = Path("model")
+NEW_MODEL_PATH = MODEL_DIR / "best_model.keras"
+LEGACY_MODEL_PATH = MODEL_DIR / "best_model.h5"
+MODEL_PATH = str(NEW_MODEL_PATH if NEW_MODEL_PATH.exists() else LEGACY_MODEL_PATH)
 
 # IMPORTANT: this order matches Keras flow_from_directory alphabetical class_indices
 CLASS_NAMES = [
@@ -124,10 +130,28 @@ DISEASE_INFO = {
 }
 
 @st.cache_resource
-def load_model():
-    return tf.keras.models.load_model(MODEL_PATH)
+def load_model(model_path):
+    return tf.keras.models.load_model(model_path)
 
-model = load_model()
+# Use the exact output order saved alongside a newly trained model.
+CLASS_NAMES_PATH = MODEL_DIR / "class_names.json"
+if CLASS_NAMES_PATH.exists():
+    with CLASS_NAMES_PATH.open("r", encoding="utf-8") as file:
+        CLASS_NAMES = json.load(file)
+
+missing_info = [name for name in CLASS_NAMES if name not in DISEASE_INFO]
+if missing_info:
+    st.error(f"Thiếu thông tin hiển thị cho các lớp: {missing_info}")
+    st.stop()
+
+model = load_model(MODEL_PATH)
+output_classes = int(model.output_shape[-1])
+if output_classes != len(CLASS_NAMES):
+    st.error(
+        f"Model có {output_classes} đầu ra nhưng danh sách lớp có {len(CLASS_NAMES)} mục. "
+        "Vui lòng kiểm tra best_model.keras và class_names.json."
+    )
+    st.stop()
 
 uploaded_file = st.file_uploader(
     "📸 Chọn ảnh lá cây",

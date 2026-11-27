@@ -457,3 +457,18 @@ Kết quả AI chỉ nên được sử dụng như **thông tin tham khảo**.
 Thông tin về thuốc bảo vệ thực vật trong README/app không thay thế hướng dẫn của nhà sản xuất, chuyên gia nông nghiệp hoặc quy định pháp luật địa phương.
 
 Luôn đọc nhãn thuốc và tuân thủ liều lượng, thời gian cách ly và quy định sử dụng trước khi áp dụng thực tế.
+
+
+## 🔁 Retrain the model on Google Colab
+
+A reproducible MobileNetV2 training pipeline is available:
+
+- [Open the training notebook in Google Colab](https://colab.research.google.com/github/ShimeKano/Plant-Disease-Detection/blob/feature/reproducible-mobilenetv2-colab-training/notebooks/train_mobilenetv2_colab.ipynb)
+- [Training workflow and dataset layout](docs/TRAINING.md)
+- Training implementation: `src/train.py`
+
+The notebook expects a PlantVillage dataset containing the same 15 supported classes, stored in Google Drive (default: `MyDrive/PlantVillage`). It creates stratified train/validation/test splits, applies augmentation only during training, fine-tunes MobileNetV2, and exports a test-set classification report and confusion matrix. The trained model and class mapping are saved to Google Drive; they are not committed to this repository.
+
+After training, copy `best_model.keras` and `class_names.json` into `model/`. The app prioritizes this model and checks that its output dimension matches the class list. The existing `best_model.h5` remains as a fallback.
+
+**Important:** training metrics are not known until you execute the notebook. Do not treat example or previous model metrics as results of this pipeline.
