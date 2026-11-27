@@ -15,26 +15,40 @@ IMG_SIZE = 128
 MODEL_DIR = Path("model")
 NEW_MODEL_PATH = MODEL_DIR / "best_model.keras"
 LEGACY_MODEL_PATH = MODEL_DIR / "best_model.h5"
-MODEL_PATH = str(NEW_MODEL_PATH if NEW_MODEL_PATH.exists() else LEGACY_MODEL_PATH)
 
-# IMPORTANT: this order matches Keras flow_from_directory alphabetical class_indices
-CLASS_NAMES = [
-    "Pepper__bell___Bacterial_spot",
-    "Pepper__bell___healthy",
-    "Potato___Early_blight",
-    "Potato___Late_blight",
-    "Potato___healthy",
-    "Tomato__Bacterial_spot",
-    "Tomato__Early_blight",
-    "Tomato__Late_blight",
-    "Tomato__Leaf_Mold",
-    "Tomato__Septoria_leaf_spot",
-    "Tomato__Spider_mites_Two_spotted_spider_mite",
-    "Tomato__Target_Spot",
-    "Tomato__Tomato_YellowLeaf__Curl_Virus",
-    "Tomato__Tomato_mosaic_virus",
-    "Tomato__healthy",
-]
+# Model A: original model committed in 2025. Its output order is
+# alphabetically sorted by Keras flow_from_directory.
+LEGACY_CLASS_NAMES = sorted([
+    "Tomato__Target_Spot", "Tomato_Leaf_Mold",
+    "Tomato__Tomato_YellowLeaf__Curl_Virus", "Pepper__bell___healthy",
+    "Tomato__Tomato_mosaic_virus", "Tomato_Late_blight",
+    "Tomato_Spider_mites_Two_spotted_spider_mite", "Potato___Early_blight",
+    "Tomato_Bacterial_spot", "Pepper__bell___Bacterial_spot",
+    "Potato___healthy", "Tomato_Early_blight", "Tomato_healthy",
+    "Tomato_Septoria_leaf_spot", "Potato___Late_blight",
+])
+LEGACY_TO_CURRENT = {
+    "Tomato_Bacterial_spot": "Tomato__Bacterial_spot",
+    "Tomato_Early_blight": "Tomato__Early_blight",
+    "Tomato_Late_blight": "Tomato__Late_blight",
+    "Tomato_Leaf_Mold": "Tomato__Leaf_Mold",
+    "Tomato_Septoria_leaf_spot": "Tomato__Septoria_leaf_spot",
+    "Tomato_Spider_mites_Two_spotted_spider_mite": "Tomato__Spider_mites_Two_spotted_spider_mite",
+    "Tomato_healthy": "Tomato__healthy",
+}
+
+CLASS_NAMES_PATH = MODEL_DIR / "class_names.json"
+if not CLASS_NAMES_PATH.exists():
+    st.error("Không tìm thấy model/class_names.json.")
+    st.stop()
+with CLASS_NAMES_PATH.open("r", encoding="utf-8") as file:
+    CLASS_NAMES = json.load(file)
+
+def class_names_for_model(model_path):
+    return LEGACY_CLASS_NAMES if model_path.name == "best_model.h5" else CLASS_NAMES
+
+def canonical_class_name(name):
+    return LEGACY_TO_CURRENT.get(name, name)
 
 DISEASE_INFO = {
     "Pepper__bell___Bacterial_spot": {
@@ -131,48 +145,45 @@ DISEASE_INFO = {
 
 @st.cache_resource
 def load_model(model_path, modified_time):
-    # modified_time invalidates Streamlit's cache when a model file is replaced.
     return tf.keras.models.load_model(model_path, compile=False)
 
-CLASS_NAMES_PATH = MODEL_DIR / "class_names.json"
-if CLASS_NAMES_PATH.exists():
-    with CLASS_NAMES_PATH.open("r", encoding="utf-8") as file:
-        CLASS_NAMES = json.load(file)
-
-missing_info = [name for name in CLASS_NAMES if name not in DISEASE_INFO]
-if missing_info:
-    st.error(f"Thiếu thông tin hiển thị cho các lớp: {missing_info}")
-    st.stop()
-
-# Automatically discover model artifacts placed in model/.
-MODEL_FILES = sorted(
-    [p for p in MODEL_DIR.glob("*.keras") if p.is_file()] +
-    [p for p in MODEL_DIR.glob("*.h5") if p.is_file()],
-    key=lambda p: (p.suffix != ".keras", p.name.lower())
+# Keep Model A and Model B in a stable, explicit order.
+MODEL_FILES = []
+if LEGACY_MODEL_PATH.exists():
+    MODEL_FILES.append(LEGACY_MODEL_PATH)
+if NEW_MODEL_PATH.exists():
+    MODEL_FILES.append(NEW_MODEL_PATH)
+MODEL_FILES.extend(
+    p for p in sorted(MODEL_DIR.glob("*.keras")) + sorted(MODEL_DIR.glob("*.h5"))
+    if p not in MODEL_FILES and p.is_file()
 )
 if not MODEL_FILES:
     st.error("Không tìm thấy model .keras hoặc .h5 trong thư mục model/.")
     st.stop()
 
-MODEL_OPTIONS = {p.name: p for p in MODEL_FILES}
+MODEL_LABELS = {
+    "best_model.h5": "Model A — bản gốc (07/05/2025)",
+    "best_model.keras": "Model B — bản mới (27/11/2026)",
+}
+def display_model_name(path):
+    return MODEL_LABELS.get(path.name, path.name)
+
 st.subheader("⚙️ Chọn model để so sánh")
-st.caption("Ứng dụng tự tìm các file .keras và .h5 trong thư mục model/. Hãy đặt hai model cần đánh giá vào thư mục này.")
+st.caption("Model A là bản HDF5 gốc; Model B là bản Keras mới. Mỗi model có class mapping riêng.")
 
 if len(MODEL_FILES) >= 2:
+    options = {display_model_name(p): p for p in MODEL_FILES}
+    labels = list(options.keys())
     left, right = st.columns(2)
-    names = list(MODEL_OPTIONS.keys())
-    default_a = names[0]
-    default_b = names[1]
     with left:
-        model_a_name = st.selectbox("Model A", names, index=0, key="model_a")
-    other_names = [name for name in names if name != model_a_name]
+        selected_a = st.selectbox("Model A", labels, index=0, key="model_a")
+    other_labels = [label for label in labels if label != selected_a]
     with right:
-        model_b_name = st.selectbox("Model B", other_names, index=0, key="model_b")
-    selected_models = [MODEL_OPTIONS[model_a_name], MODEL_OPTIONS[model_b_name]]
-    st.info("Hai lựa chọn hiện tại là hai tệp model riêng. Nếu chúng chỉ là hai định dạng lưu của cùng một lần huấn luyện thì kết quả không thể được xem là so sánh hai phiên bản AI độc lập.")
+        selected_b = st.selectbox("Model B", other_labels, index=0, key="model_b")
+    selected_models = [options[selected_a], options[selected_b]]
 else:
     selected_models = [MODEL_FILES[0]]
-    st.warning("Hiện chỉ tìm thấy một model. Thêm model thứ hai vào thư mục model/ để bật so sánh A/B.")
+    st.warning("Hiện chỉ có một model. Thêm model thứ hai vào thư mục model/ để bật so sánh A/B.")
 
 uploaded_file = st.file_uploader("📸 Chọn ảnh lá cây để kiểm tra", type=["jpg", "jpeg", "png"])
 
@@ -190,21 +201,30 @@ if uploaded_file:
     for model_path in selected_models:
         try:
             model = load_model(str(model_path), model_path.stat().st_mtime)
+            source_classes = class_names_for_model(model_path)
             output_classes = int(model.output_shape[-1])
-            if output_classes != len(CLASS_NAMES):
-                st.error(f"{model_path.name}: model có {output_classes} đầu ra, nhưng class_names.json có {len(CLASS_NAMES)} lớp.")
+            if output_classes != len(source_classes):
+                st.error(f"{display_model_name(model_path)}: model có {output_classes} đầu ra, mapping có {len(source_classes)} nhãn.")
                 continue
             scores = model.predict(input_tensor, verbose=0)[0]
-            pred_index = int(np.argmax(scores))
+            top_indices = np.argsort(scores)[-3:][::-1]
+            raw_class = source_classes[int(np.argmax(scores))]
+            canonical = canonical_class_name(raw_class)
+            if canonical not in DISEASE_INFO:
+                st.error(f"Không có nội dung tiếng Việt cho nhãn {raw_class}.")
+                continue
             results.append({
-                "name": model_path.name,
+                "name": display_model_name(model_path),
                 "scores": scores,
-                "index": pred_index,
-                "class": CLASS_NAMES[pred_index],
-                "confidence": float(scores[pred_index]) * 100,
+                "class": canonical,
+                "confidence": float(np.max(scores)) * 100,
+                "top": [
+                    (canonical_class_name(source_classes[int(i)]), float(scores[int(i)]) * 100)
+                    for i in top_indices
+                ],
             })
         except Exception as exc:
-            st.error(f"Không thể tải/chạy {model_path.name}: {exc}")
+            st.error(f"Không thể tải/chạy {display_model_name(model_path)}: {exc}")
 
     if results:
         st.divider()
@@ -216,23 +236,23 @@ if uploaded_file:
                 st.success(DISEASE_INFO[result["class"]]["name"])
                 st.metric("Confidence", f"{result['confidence']:.2f}%")
                 st.caption("Top 3")
-                for idx in np.argsort(result["scores"])[-3:][::-1]:
-                    cls = CLASS_NAMES[int(idx)]
-                    st.write(f"{DISEASE_INFO[cls]['name']} — {float(result['scores'][idx])*100:.2f}%")
+                for cls, confidence in result["top"]:
+                    if cls in DISEASE_INFO:
+                        st.write(f"{DISEASE_INFO[cls]['name']} — {confidence:.2f}%")
 
         if len(results) == 2:
-            agree = results[0]["class"] == results[1]["class"]
-            if agree:
+            if results[0]["class"] == results[1]["class"]:
                 st.success("Hai model đưa ra cùng một nhãn dự đoán.")
             else:
-                st.warning("Hai model không thống nhất. Không nên chọn thuốc hoặc xử lý cây chỉ dựa trên một trong hai kết quả.")
-                comparison = {
-                    "Model A": DISEASE_INFO[results[0]["class"]]["name"],
-                    "Model B": DISEASE_INFO[results[1]["class"]]["name"],
-                }
-                st.table(comparison)
+                st.warning("Hai model không thống nhất. Không nên quyết định xử lý cây chỉ dựa trên một trong hai kết quả.")
+                st.table({
+                    "Model": [results[0]["name"], results[1]["name"]],
+                    "Prediction": [
+                        DISEASE_INFO[results[0]["class"]]["name"],
+                        DISEASE_INFO[results[1]["class"]]["name"],
+                    ],
+                })
 
-        # Treatment guidance is shown only when the selected models agree.
         if len(results) == 1 or (len(results) == 2 and results[0]["class"] == results[1]["class"]):
             info = DISEASE_INFO[results[0]["class"]]
             st.divider()
@@ -241,15 +261,16 @@ if uploaded_file:
             st.write(info["treatment"])
             st.caption(info["active"])
         else:
-            st.info("Do kết quả đang mâu thuẫn, ứng dụng tạm ẩn hướng xử lý/thuốc để tránh đưa ra khuyến nghị dựa trên kết luận chưa chắc chắn.")
+            st.info("Do kết quả đang mâu thuẫn, ứng dụng tạm ẩn hướng xử lý/thuốc để tránh khuyến nghị dựa trên kết luận chưa chắc chắn.")
 
         st.warning(
             "⚠️ Confidence là điểm đầu ra của mô hình, không đồng nghĩa xác suất chẩn đoán đúng. "
-            "Đây là gợi ý tham khảo, không phải chẩn đoán chuyên gia. Thuốc bảo vệ thực vật phải đúng cây + đúng bệnh trên nhãn, đúng liều và thời gian cách ly."
+            "Đây là gợi ý tham khảo, không phải chẩn đoán chuyên gia. Thuốc phải đúng cây + đúng bệnh trên nhãn, đúng liều và thời gian cách ly."
         )
 
 st.divider()
 st.caption(
-    "Model được huấn luyện trên PlantVillage với 15 class. "
-    "Ảnh thực địa có thể khác dữ liệu huấn luyện. Muốn kết luận model nào tốt hơn, hãy đánh giá cả hai trên cùng một tập ảnh thực tế có nhãn đúng bằng notebook so sánh."
+    "Model A dùng PlantVillage và ImageDataGenerator từ notebook cũ; Model B dùng pipeline TFDS hiện tại. "
+    "Cả hai nhận ảnh RGB 128×128, pixel [0,1], nhưng khác split và augmentation. "
+    "Muốn kết luận model nào tốt hơn, đánh giá cả hai trên cùng tập ảnh thực tế có nhãn."
 )

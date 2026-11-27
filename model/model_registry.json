@@ -1,17 +1,45 @@
 {
   "models": [
     {
-      "file": "best_model.keras",
-      "label": "Primary model (Keras)",
+      "id": "A",
+      "file": "best_model.h5",
+      "label": "Model A — bản gốc",
       "status": "present",
-      "training_run": "unknown"
+      "source_commit": "ba7f46c1e8a377e86d19a2dd12f8bc87825b4f31",
+      "source_date": "2025-05-07",
+      "training_notebook": "notebooks/plant_disease_training.ipynb at source commit",
+      "classes": 15,
+      "input_shape": [
+        128,
+        128,
+        3
+      ],
+      "input_range": "[0,1]",
+      "class_mapping": "Alphabetically sorted directory order from flow_from_directory",
+      "dataset": "PlantVillage ZIP on Google Drive; original notebook reported 33,027 training and 8,249 validation images",
+      "split": "80/20 validation_split; no independent test split documented",
+      "augmentation": "ImageDataGenerator rotation, zoom, shear, flip, width/height shift; same generator object used for validation subset"
     },
     {
-      "file": "best_model.h5",
-      "label": "Legacy-format model (HDF5)",
+      "id": "B",
+      "file": "best_model.keras",
+      "label": "Model B — pipeline mới",
       "status": "present",
-      "training_run": "unknown"
+      "source_commit": "e8fa7d430fa5c25d9349ca6485ae96a2a64a2f4c",
+      "source_date": "2026-11-27",
+      "training_notebook": "notebooks/training/train_mobilenetv2_colab.ipynb",
+      "classes": 15,
+      "input_shape": [
+        128,
+        128,
+        3
+      ],
+      "input_range": "[0,1] with internal rescaling to [-1,1]",
+      "class_mapping": "model/class_names.json",
+      "dataset": "PlantVillage via TFDS plant_village; archived run 22,785 images",
+      "split": "Stratified 70/15/15; seed 42; 15,949/3,418/3,418",
+      "augmentation": "RandomFlip, RandomRotation, RandomZoom during training only"
     }
   ],
-  "note": "The two files have not been verified as independently trained models. The Streamlit app discovers .keras and .h5 files automatically. Add separately trained model files here for meaningful A/B comparison."
+  "comparison_note": "Evaluate both models on the same independent, labeled field dataset. Do not compare Model A validation metrics against Model B test metrics."
 }

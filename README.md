@@ -51,6 +51,15 @@ Checkpoint theo epoch được lưu riêng lên Google Drive. Notebook hiện l�
 
 Chi tiết kỹ thuật: [docs/TRAINING.md](docs/TRAINING.md).
 
+## Hai model hiện có
+
+- **Model A:** `model/best_model.h5`, bản gốc từ commit 07/05/2025.
+- **Model B:** `model/best_model.keras`, bản mới upload 27/11/2026.
+- Ứng dụng và notebook so sánh dùng class mapping riêng cho từng model vì cách đặt tên lớp trong bản gốc khác pipeline mới.
+- Model A chưa có tập test độc lập được ghi nhận; không so sánh trực tiếp validation score cũ với test score mới.
+
+Chi tiết nguồn gốc: [model/README.md](model/README.md) và [model/model_registry.json](model/model_registry.json).
+
 ## So sánh hai model
 
 Giao diện Streamlit tự tìm các file `.keras` và `.h5` trong thư mục `model/`, cho phép chọn Model A và Model B, sau đó chạy dự đoán trên cùng một ảnh và hiển thị Top-3, confidence, mức độ đồng thuận. Khi hai model bất đồng, ứng dụng ẩn hướng xử lý để tránh khuyến nghị dựa trên kết luận mâu thuẫn.
