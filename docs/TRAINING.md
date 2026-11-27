@@ -9,8 +9,8 @@ Notebook: notebooks/train_mobilenetv2_colab.ipynb
 ## Chạy trên Colab
 
 1. Mở notebook bằng nút Open in Colab.
-2. Đưa dataset lên Google Drive, mặc định ở MyDrive/PlantVillage.
-3. Chạy lần lượt các cell. Nếu dataset ở nơi khác, sửa DATASET_DIR.
+2. Chọn DATA_SOURCE trong notebook: drive_folder (mặc định MyDrive/PlantVillage) hoặc upload_zip để tải một file ZIP từ máy tính lên Colab.
+3. Chạy lần lượt các cell. Nếu dùng Drive và dataset ở nơi khác, sửa DATASET_DIR.
 4. Notebook lưu ZIP kết quả vào MyDrive/plant_disease_training_artifacts.zip.
 
 ## Quy trình
