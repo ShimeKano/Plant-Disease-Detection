@@ -1,0 +1,70 @@
+{
+  "architecture": "MobileNetV2",
+  "pretrained_weights": "ImageNet",
+  "input_size": [
+    128,
+    128,
+    3
+  ],
+  "input_range": "[0,1]; model contains Rescaling to [-1,1]",
+  "class_names": [
+    "Pepper__bell___Bacterial_spot",
+    "Pepper__bell___healthy",
+    "Potato___Early_blight",
+    "Potato___Late_blight",
+    "Potato___healthy",
+    "Tomato__Bacterial_spot",
+    "Tomato__Early_blight",
+    "Tomato__Late_blight",
+    "Tomato__Leaf_Mold",
+    "Tomato__Septoria_leaf_spot",
+    "Tomato__Spider_mites_Two_spotted_spider_mite",
+    "Tomato__Target_Spot",
+    "Tomato__Tomato_YellowLeaf__Curl_Virus",
+    "Tomato__Tomato_mosaic_virus",
+    "Tomato__healthy"
+  ],
+  "class_to_index": {
+    "Pepper__bell___Bacterial_spot": 0,
+    "Pepper__bell___healthy": 1,
+    "Potato___Early_blight": 2,
+    "Potato___Late_blight": 3,
+    "Potato___healthy": 4,
+    "Tomato__Bacterial_spot": 5,
+    "Tomato__Early_blight": 6,
+    "Tomato__Late_blight": 7,
+    "Tomato__Leaf_Mold": 8,
+    "Tomato__Septoria_leaf_spot": 9,
+    "Tomato__Spider_mites_Two_spotted_spider_mite": 10,
+    "Tomato__Target_Spot": 11,
+    "Tomato__Tomato_YellowLeaf__Curl_Virus": 12,
+    "Tomato__Tomato_mosaic_virus": 13,
+    "Tomato__healthy": 14
+  },
+  "dataset_counts": {
+    "Tomato__Septoria_leaf_spot": 1771,
+    "Tomato__healthy": 1591,
+    "Tomato__Spider_mites_Two_spotted_spider_mite": 1676,
+    "Potato___Late_blight": 1000,
+    "Tomato__Tomato_mosaic_virus": 373,
+    "Tomato__Tomato_YellowLeaf__Curl_Virus": 5357,
+    "Tomato__Target_Spot": 1404,
+    "Tomato__Bacterial_spot": 2127,
+    "Potato___Early_blight": 1000,
+    "Potato___healthy": 152,
+    "Tomato__Leaf_Mold": 952,
+    "Tomato__Early_blight": 1000,
+    "Pepper__bell___healthy": 1477,
+    "Pepper__bell___Bacterial_spot": 997,
+    "Tomato__Late_blight": 1908
+  },
+  "split": {
+    "train": 15949,
+    "validation": 3418,
+    "test": 3418
+  },
+  "seed": 42,
+  "test_loss": 0.21585752069950104,
+  "test_accuracy": 0.9297835230827332,
+  "tensorflow_version": "2.21.0"
+}
