@@ -189,15 +189,22 @@ def main():
     model,base=build_model(args.img_size,len(EXPECTED_CLASSES))
     model.compile(optimizer=tf.keras.optimizers.Adam(1e-3),loss="sparse_categorical_crossentropy",metrics=["accuracy"])
     backup_dir = Path(args.backup_dir).expanduser() if args.backup_dir else None
+    # Reuse ModelCheckpoint and Drive backup callback across both phases so
+    # "best" means best validation accuracy across the entire training run.
+    checkpoint_cb = tf.keras.callbacks.ModelCheckpoint(
+        str(model_path), monitor="val_accuracy", mode="max", save_best_only=True, verbose=1
+    )
+    drive_backup_cb = DriveEpochBackup(backup_dir, "training") if backup_dir else None
     def callbacks_for(phase):
         items = [
-            tf.keras.callbacks.ModelCheckpoint(str(model_path),monitor="val_accuracy",mode="max",save_best_only=True,verbose=1),
+            checkpoint_cb,
             tf.keras.callbacks.EarlyStopping(monitor="val_loss",patience=3,restore_best_weights=True,verbose=1),
             tf.keras.callbacks.CSVLogger(str(out/"training_log.csv"), append=(phase != "head")),
             EpochProgress(phase),
         ]
-        if backup_dir:
-            items.append(DriveEpochBackup(backup_dir, phase))
+        if drive_backup_cb:
+            drive_backup_cb.phase = phase
+            items.append(drive_backup_cb)
         return items
     print("\n=== Phase 1: train classification head ===", flush=True)
     h1=model.fit(train_ds,validation_data=val_ds,epochs=args.epochs,callbacks=callbacks_for("head"),verbose=1)
