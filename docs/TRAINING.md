@@ -1,37 +1,45 @@
-# Huấn luyện lại MobileNetV2
+# Quy trình huấn luyện MobileNetV2
 
-Notebook: notebooks/train_mobilenetv2_colab.ipynb
+Notebook chính thức: [notebooks/training/train_mobilenetv2_colab.ipynb](../notebooks/training/train_mobilenetv2_colab.ipynb).
 
-## Chuẩn bị dữ liệu
+## Dữ liệu
 
-Đặt PlantVillage theo cấu trúc gồm 15 thư mục lớp. Script hỗ trợ cả biến thể tên thư mục Tomato có một hoặc hai dấu gạch dưới. Cần đủ đúng 15 lớp; nếu thiếu lớp, chương trình dừng để tránh gán nhãn sai.
+Notebook tải PlantVillage qua TensorFlow Datasets, không yêu cầu upload dataset thủ công. Tập dữ liệu được lọc thành đúng 15 lớp mà ứng dụng hỗ trợ. Tên lớp được chuẩn hóa về tên thư mục/class mapping mà ứng dụng sử dụng.
 
-## Chạy trên Colab
+Nếu TFDS thay đổi nhãn hoặc không cung cấp một trong 15 lớp, notebook sẽ dừng thay vì âm thầm gán nhãn sai.
 
-1. Mở notebook bằng nút Open in Colab.
-2. Chọn DATA_SOURCE trong notebook: drive_folder (mặc định MyDrive/PlantVillage) hoặc upload_zip để tải một file ZIP từ máy tính lên Colab.
-3. Chạy lần lượt các cell. Nếu dùng Drive và dataset ở nơi khác, sửa DATASET_DIR.
-4. Notebook lưu ZIP kết quả vào MyDrive/plant_disease_training_artifacts.zip.
+## Tiền xử lý và chia tập
 
-## Quy trình
+- Ảnh được giải mã thành RGB và resize về 128 × 128.
+- Pixel được chuẩn hóa về [0,1].
+- Chia dữ liệu phân tầng, seed mặc định 42: 70% train, 15% validation, 15% test.
+- Augmentation nằm trong model và chỉ hoạt động khi training.
 
-- Chia dữ liệu có phân tầng: 70% train, 15% validation, 15% test; seed mặc định 42.
-- Augmentation chỉ áp dụng trong lúc train.
-- Input ảnh trong pipeline là [0,1]; model có lớp Rescaling chuyển sang [-1,1] theo yêu cầu MobileNetV2.
-- Phase 1 huấn luyện lớp phân loại với backbone đóng băng.
-- Phase 2 fine-tune 30 lớp cuối với learning rate thấp; Batch Normalization giữ đóng băng.
-- Chọn checkpoint theo validation accuracy và early stopping theo validation loss.
-- Chỉ dùng tập test sau khi đã chọn checkpoint tốt nhất.
-- Xuất classification report, confusion matrix, learning curves, metadata và model.
+## Mô hình
 
-## Đưa model vào ứng dụng
+- MobileNetV2, ImageNet pretrained, include_top=False.
+- Global Average Pooling.
+- Dropout 0.3.
+- Dense softmax với 15 đầu ra.
+- Lớp Rescaling bên trong model đổi input [0,1] sang [-1,1] theo yêu cầu MobileNetV2.
 
-Giải nén ZIP và chép best_model.keras cùng class_names.json vào thư mục model/. Ứng dụng ưu tiên model .keras, đọc thứ tự lớp từ JSON và kiểm tra số đầu ra trước khi dự đoán. Model .h5 cũ vẫn được giữ làm phương án dự phòng nếu chưa có model mới.
+## Hai giai đoạn
 
-Không commit dataset hoặc model đã huấn luyện lên GitHub. Lưu model artifacts trên Google Drive.
+1. Đóng băng backbone và huấn luyện classification head với Adam learning rate 1e-3 (mặc định 12 epochs).
+2. Mở 30 lớp cuối của MobileNetV2, giữ Batch Normalization đóng băng, fine-tune với Adam learning rate 1e-5 (mặc định 8 epochs).
+
+Checkpoint tốt nhất được chọn theo validation accuracy; EarlyStopping theo validation loss. Test set chỉ được sử dụng sau khi chọn checkpoint.
+
+## Sao lưu và xuất kết quả
+
+Notebook lưu checkpoint theo epoch vào `MyDrive/PlantDiseaseTraining/checkpoints`, log vào `training_log.csv`, sau đó đóng gói model và báo cáo thành ZIP trong Google Drive.
+
+Checkpoint hiện lưu model và optimizer state nhưng chưa tự động tiếp tục từ đúng epoch khi runtime bị ngắt. Không commit dataset hoặc model huấn luyện mới tự động lên GitHub. Kiểm tra model, class mapping và các báo cáo trước khi thay model đang chạy ứng dụng.
+
+## Kiểm thử ứng dụng
+
+Dùng [notebooks/testing/test_streamlit_colab.ipynb](../notebooks/testing/test_streamlit_colab.ipynb) để clone repository, kiểm tra model, chạy Streamlit và mở giao diện qua Cloudflare Quick Tunnel.
 
 ## Giới hạn
 
-- Đây là đánh giá nội bộ trên PlantVillage; cần ảnh thực địa độc lập để đánh giá khả năng tổng quát hóa.
-- Confidence không phải xác suất chẩn đoán chắc chắn.
-- Hướng dẫn thuốc trong ứng dụng là nội dung tham khảo tĩnh, không phải kê đơn.
+PlantVillage là ảnh trong điều kiện tương đối kiểm soát. Cần đánh giá độc lập trên ảnh thực địa tại địa phương; không diễn giải confidence thành xác suất chẩn đoán chắc chắn.

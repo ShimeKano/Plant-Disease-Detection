@@ -101,12 +101,77 @@ def build_model(img_size,num_classes):
     outputs = tf.keras.layers.Dense(num_classes,activation="softmax",name="predictions")(x)
     return tf.keras.Model(inputs,outputs,name="plant_disease_mobilenetv2"),base
 
+class DriveEpochBackup(tf.keras.callbacks.Callback):
+    """Save the latest model to Drive after every epoch; keep best validation model separately."""
+    def __init__(self, backup_dir, phase):
+        super().__init__()
+        self.backup_dir = Path(backup_dir)
+        self.backup_dir.mkdir(parents=True, exist_ok=True)
+        self.phase = phase
+        self.best_val_accuracy = -float("inf")
+
+    def _atomic_save(self, destination):
+        destination = Path(destination)
+        temporary = destination.with_name(destination.stem + ".tmp.keras")
+        self.model.save(temporary)
+        os.replace(temporary, destination)
+
+    def on_epoch_end(self, epoch, logs=None):
+        logs = logs or {}
+        latest = self.backup_dir / "latest_checkpoint.keras"
+        self._atomic_save(latest)
+        val_acc = float(logs.get("val_accuracy", -1.0))
+        if val_acc > self.best_val_accuracy:
+            self.best_val_accuracy = val_acc
+            self._atomic_save(self.backup_dir / "best_model.keras")
+        state = {
+            "phase": self.phase,
+            "completed_epoch_in_phase": int(epoch + 1),
+            "val_accuracy": val_acc,
+            "val_loss": float(logs.get("val_loss", -1.0)),
+            "latest_checkpoint": str(latest),
+            "note": "Checkpoint saved after epoch. This preserves model weights and optimizer state, but this notebook does not automatically resume an interrupted fit."
+        }
+        state_path = self.backup_dir / "training_state.json"
+        temp_state = state_path.with_suffix(".tmp")
+        temp_state.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(temp_state, state_path)
+        print(f"\n[DRIVE BACKUP] Epoch {epoch + 1}: latest checkpoint saved to {latest}", flush=True)
+
+
+class EpochProgress(tf.keras.callbacks.Callback):
+    def __init__(self, phase_name):
+        super().__init__()
+        self.phase_name = phase_name
+        self.started = None
+
+    def on_train_begin(self, logs=None):
+        import time
+        self.started = time.time()
+        print(f"\n[PROGRESS] {self.phase_name}: bắt đầu huấn luyện.", flush=True)
+
+    def on_epoch_end(self, epoch, logs=None):
+        import time
+        logs = logs or {}
+        elapsed = time.time() - self.started
+        print(
+            f"[PROGRESS] {self.phase_name} | epoch {epoch + 1} | "
+            f"loss={logs.get('loss', float('nan')):.4f} | "
+            f"accuracy={logs.get('accuracy', float('nan')):.4f} | "
+            f"val_loss={logs.get('val_loss', float('nan')):.4f} | "
+            f"val_accuracy={logs.get('val_accuracy', float('nan')):.4f} | "
+            f"elapsed={elapsed/60:.1f} phút",
+            flush=True
+        )
+
+
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument("--data-dir",required=True); p.add_argument("--output-dir",default="training_output")
     p.add_argument("--img-size",type=int,default=128); p.add_argument("--batch-size",type=int,default=32)
     p.add_argument("--epochs",type=int,default=12); p.add_argument("--fine-tune-epochs",type=int,default=8)
     p.add_argument("--seed",type=int,default=42); p.add_argument("--skip-fine-tuning",action="store_true")
+    p.add_argument("--backup-dir",default=None,help="Google Drive folder for per-epoch model backups")
     args=p.parse_args()
     set_seed(args.seed); tf.keras.backend.clear_session()
     print("TensorFlow:",tf.__version__); print("GPU devices:",tf.config.list_physical_devices("GPU"))
@@ -123,22 +188,35 @@ def main():
     model_path=out/"best_model.keras"
     model,base=build_model(args.img_size,len(EXPECTED_CLASSES))
     model.compile(optimizer=tf.keras.optimizers.Adam(1e-3),loss="sparse_categorical_crossentropy",metrics=["accuracy"])
-    callbacks=[
-        tf.keras.callbacks.ModelCheckpoint(str(model_path),monitor="val_accuracy",mode="max",save_best_only=True,verbose=1),
-        tf.keras.callbacks.EarlyStopping(monitor="val_loss",patience=3,restore_best_weights=True,verbose=1),
-        tf.keras.callbacks.CSVLogger(str(out/"training_log.csv")),
-    ]
-    print("\n=== Phase 1: train classification head ===")
-    h1=model.fit(train_ds,validation_data=val_ds,epochs=args.epochs,callbacks=callbacks)
+    backup_dir = Path(args.backup_dir).expanduser() if args.backup_dir else None
+    # Reuse ModelCheckpoint and Drive backup callback across both phases so
+    # "best" means best validation accuracy across the entire training run.
+    checkpoint_cb = tf.keras.callbacks.ModelCheckpoint(
+        str(model_path), monitor="val_accuracy", mode="max", save_best_only=True, verbose=1
+    )
+    drive_backup_cb = DriveEpochBackup(backup_dir, "training") if backup_dir else None
+    def callbacks_for(phase):
+        items = [
+            checkpoint_cb,
+            tf.keras.callbacks.EarlyStopping(monitor="val_loss",patience=3,restore_best_weights=True,verbose=1),
+            tf.keras.callbacks.CSVLogger(str(out/"training_log.csv"), append=(phase != "head")),
+            EpochProgress(phase),
+        ]
+        if drive_backup_cb:
+            drive_backup_cb.phase = phase
+            items.append(drive_backup_cb)
+        return items
+    print("\n=== Phase 1: train classification head ===", flush=True)
+    h1=model.fit(train_ds,validation_data=val_ds,epochs=args.epochs,callbacks=callbacks_for("head"),verbose=1)
     h2=None
     if not args.skip_fine_tuning and args.fine_tune_epochs>0:
-        print("\n=== Phase 2: fine-tune final MobileNetV2 layers ===")
+        print("\n=== Phase 2: fine-tune final MobileNetV2 layers ===", flush=True)
         base.trainable=True
         for layer in base.layers[:-30]: layer.trainable=False
         for layer in base.layers:
             if isinstance(layer,tf.keras.layers.BatchNormalization): layer.trainable=False
         model.compile(optimizer=tf.keras.optimizers.Adam(1e-5),loss="sparse_categorical_crossentropy",metrics=["accuracy"])
-        h2=model.fit(train_ds,validation_data=val_ds,epochs=args.fine_tune_epochs,callbacks=callbacks)
+        h2=model.fit(train_ds,validation_data=val_ds,epochs=args.fine_tune_epochs,callbacks=callbacks_for("fine_tune"),verbose=1)
     # Test set is used only after checkpoint selection.
     model=tf.keras.models.load_model(model_path)
     test_loss,test_accuracy=model.evaluate(test_ds,verbose=1)
