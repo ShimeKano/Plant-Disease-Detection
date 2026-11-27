@@ -43,3 +43,13 @@ Dùng [notebooks/testing/test_streamlit_colab.ipynb](../notebooks/testing/test_s
 ## Giới hạn
 
 PlantVillage là ảnh trong điều kiện tương đối kiểm soát. Cần đánh giá độc lập trên ảnh thực địa tại địa phương; không diễn giải confidence thành xác suất chẩn đoán chắc chắn.
+
+## Dataset đã sử dụng
+
+Danh mục có thể kiểm tra được: [data/DATASETS.md](../data/DATASETS.md) và [data/dataset_catalog.json](../data/dataset_catalog.json).
+
+Hiện chỉ xác nhận được PlantVillage qua TensorFlow Datasets (`plant_village`) trong pipeline hiện tại. Counts và split trong catalog là của lần chạy được lưu metadata, không phải cam kết rằng mọi lần tải dữ liệu sau sẽ có cùng counts. Cần ghi version TFDS, fingerprint, class counts và split IDs ở từng lần chạy mới.
+
+## So sánh model trên ảnh thực địa
+
+Dùng [notebooks/testing/compare_models_on_labeled_dataset.ipynb](../notebooks/testing/compare_models_on_labeled_dataset.ipynb) để chạy hai hoặc nhiều model trên cùng tập ảnh có nhãn thật. Không so sánh bằng ảnh train; không dùng confidence hoặc prediction agreement thay cho accuracy.

@@ -130,10 +130,10 @@ DISEASE_INFO = {
 }
 
 @st.cache_resource
-def load_model(model_path):
-    return tf.keras.models.load_model(model_path)
+def load_model(model_path, modified_time):
+    # modified_time invalidates Streamlit's cache when a model file is replaced.
+    return tf.keras.models.load_model(model_path, compile=False)
 
-# Use the exact output order saved alongside a newly trained model.
 CLASS_NAMES_PATH = MODEL_DIR / "class_names.json"
 if CLASS_NAMES_PATH.exists():
     with CLASS_NAMES_PATH.open("r", encoding="utf-8") as file:
@@ -144,62 +144,112 @@ if missing_info:
     st.error(f"Thiếu thông tin hiển thị cho các lớp: {missing_info}")
     st.stop()
 
-model = load_model(MODEL_PATH)
-output_classes = int(model.output_shape[-1])
-if output_classes != len(CLASS_NAMES):
-    st.error(
-        f"Model có {output_classes} đầu ra nhưng danh sách lớp có {len(CLASS_NAMES)} mục. "
-        "Vui lòng kiểm tra best_model.keras và class_names.json."
-    )
+# Automatically discover model artifacts placed in model/.
+MODEL_FILES = sorted(
+    [p for p in MODEL_DIR.glob("*.keras") if p.is_file()] +
+    [p for p in MODEL_DIR.glob("*.h5") if p.is_file()],
+    key=lambda p: (p.suffix != ".keras", p.name.lower())
+)
+if not MODEL_FILES:
+    st.error("Không tìm thấy model .keras hoặc .h5 trong thư mục model/.")
     st.stop()
 
-uploaded_file = st.file_uploader(
-    "📸 Chọn ảnh lá cây",
-    type=["jpg", "jpeg", "png"]
-)
+MODEL_OPTIONS = {p.name: p for p in MODEL_FILES}
+st.subheader("⚙️ Chọn model để so sánh")
+st.caption("Ứng dụng tự tìm các file .keras và .h5 trong thư mục model/. Hãy đặt hai model cần đánh giá vào thư mục này.")
+
+if len(MODEL_FILES) >= 2:
+    left, right = st.columns(2)
+    names = list(MODEL_OPTIONS.keys())
+    default_a = names[0]
+    default_b = names[1]
+    with left:
+        model_a_name = st.selectbox("Model A", names, index=0, key="model_a")
+    other_names = [name for name in names if name != model_a_name]
+    with right:
+        model_b_name = st.selectbox("Model B", other_names, index=0, key="model_b")
+    selected_models = [MODEL_OPTIONS[model_a_name], MODEL_OPTIONS[model_b_name]]
+    st.info("Hai lựa chọn hiện tại là hai tệp model riêng. Nếu chúng chỉ là hai định dạng lưu của cùng một lần huấn luyện thì kết quả không thể được xem là so sánh hai phiên bản AI độc lập.")
+else:
+    selected_models = [MODEL_FILES[0]]
+    st.warning("Hiện chỉ tìm thấy một model. Thêm model thứ hai vào thư mục model/ để bật so sánh A/B.")
+
+uploaded_file = st.file_uploader("📸 Chọn ảnh lá cây để kiểm tra", type=["jpg", "jpeg", "png"])
+
+def prepare_input(image):
+    resized = image.convert("RGB").resize((IMG_SIZE, IMG_SIZE))
+    array = np.asarray(resized, dtype=np.float32) / 255.0
+    return np.expand_dims(array, axis=0)
 
 if uploaded_file:
     image = Image.open(uploaded_file).convert("RGB")
     st.image(image, caption="Ảnh đã tải lên", use_container_width=True)
+    input_tensor = prepare_input(image)
+    results = []
 
-    image_resized = image.resize((IMG_SIZE, IMG_SIZE))
-    img_array = np.asarray(image_resized, dtype=np.float32) / 255.0
-    input_tensor = np.expand_dims(img_array, axis=0)
+    for model_path in selected_models:
+        try:
+            model = load_model(str(model_path), model_path.stat().st_mtime)
+            output_classes = int(model.output_shape[-1])
+            if output_classes != len(CLASS_NAMES):
+                st.error(f"{model_path.name}: model có {output_classes} đầu ra, nhưng class_names.json có {len(CLASS_NAMES)} lớp.")
+                continue
+            scores = model.predict(input_tensor, verbose=0)[0]
+            pred_index = int(np.argmax(scores))
+            results.append({
+                "name": model_path.name,
+                "scores": scores,
+                "index": pred_index,
+                "class": CLASS_NAMES[pred_index],
+                "confidence": float(scores[pred_index]) * 100,
+            })
+        except Exception as exc:
+            st.error(f"Không thể tải/chạy {model_path.name}: {exc}")
 
-    prediction = model.predict(input_tensor, verbose=0)[0]
-    pred_index = int(np.argmax(prediction))
-    predicted_class = CLASS_NAMES[pred_index]
-    confidence = float(prediction[pred_index]) * 100
+    if results:
+        st.divider()
+        st.subheader("🔬 So sánh dự đoán")
+        columns = st.columns(len(results))
+        for column, result in zip(columns, results):
+            with column:
+                st.markdown(f"**{result['name']}**")
+                st.success(DISEASE_INFO[result["class"]]["name"])
+                st.metric("Confidence", f"{result['confidence']:.2f}%")
+                st.caption("Top 3")
+                for idx in np.argsort(result["scores"])[-3:][::-1]:
+                    cls = CLASS_NAMES[int(idx)]
+                    st.write(f"{DISEASE_INFO[cls]['name']} — {float(result['scores'][idx])*100:.2f}%")
 
-    info = DISEASE_INFO[predicted_class]
+        if len(results) == 2:
+            agree = results[0]["class"] == results[1]["class"]
+            if agree:
+                st.success("Hai model đưa ra cùng một nhãn dự đoán.")
+            else:
+                st.warning("Hai model không thống nhất. Không nên chọn thuốc hoặc xử lý cây chỉ dựa trên một trong hai kết quả.")
+                comparison = {
+                    "Model A": DISEASE_INFO[results[0]["class"]]["name"],
+                    "Model B": DISEASE_INFO[results[1]["class"]]["name"],
+                }
+                st.table(comparison)
 
-    st.divider()
-    st.subheader("🔍 Kết quả")
-    st.success(info["name"])
-    st.metric("Độ tin cậy của model", f"{confidence:.2f}%")
+        # Treatment guidance is shown only when the selected models agree.
+        if len(results) == 1 or (len(results) == 2 and results[0]["class"] == results[1]["class"]):
+            info = DISEASE_INFO[results[0]["class"]]
+            st.divider()
+            st.subheader("🌿 Triệu chứng và hướng xử lý tham khảo")
+            st.info(f"**Triệu chứng thường gặp:** {info['symptoms']}")
+            st.write(info["treatment"])
+            st.caption(info["active"])
+        else:
+            st.info("Do kết quả đang mâu thuẫn, ứng dụng tạm ẩn hướng xử lý/thuốc để tránh đưa ra khuyến nghị dựa trên kết luận chưa chắc chắn.")
 
-    st.info(f"**Triệu chứng thường gặp:** {info['symptoms']}")
-
-    st.subheader("💊 Hướng xử lý / thuốc thường gặp")
-    st.write(info["treatment"])
-    st.caption(info["active"])
-
-    st.warning(
-        "⚠️ Đây là gợi ý tham khảo từ model, không phải chẩn đoán chuyên gia. "
-        "Thuốc bảo vệ thực vật phải đúng cây + đúng bệnh trên nhãn, đúng liều và thời gian cách ly. "
-        "Quy định và sản phẩm được phép dùng có thể khác theo Việt Nam."
-    )
-
-    st.subheader("📊 Top 3 dự đoán")
-    top_indices = np.argsort(prediction)[-3:][::-1]
-
-    for i in top_indices:
-        cls = CLASS_NAMES[int(i)]
-        score = float(prediction[int(i)]) * 100
-        st.write(f"**{DISEASE_INFO[cls]['name']}** — {score:.2f}%")
+        st.warning(
+            "⚠️ Confidence là điểm đầu ra của mô hình, không đồng nghĩa xác suất chẩn đoán đúng. "
+            "Đây là gợi ý tham khảo, không phải chẩn đoán chuyên gia. Thuốc bảo vệ thực vật phải đúng cây + đúng bệnh trên nhãn, đúng liều và thời gian cách ly."
+        )
 
 st.divider()
 st.caption(
     "Model được huấn luyện trên PlantVillage với 15 class. "
-    "Ảnh thực địa có thể khác dữ liệu huấn luyện, vì vậy không nên dựa vào AI alone để quyết định phun thuốc."
+    "Ảnh thực địa có thể khác dữ liệu huấn luyện. Muốn kết luận model nào tốt hơn, hãy đánh giá cả hai trên cùng một tập ảnh thực tế có nhãn đúng bằng notebook so sánh."
 )

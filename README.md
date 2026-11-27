@@ -51,6 +51,18 @@ Checkpoint theo epoch được lưu riêng lên Google Drive. Notebook hiện l�
 
 Chi tiết kỹ thuật: [docs/TRAINING.md](docs/TRAINING.md).
 
+## So sánh hai model
+
+Giao diện Streamlit tự tìm các file `.keras` và `.h5` trong thư mục `model/`, cho phép chọn Model A và Model B, sau đó chạy dự đoán trên cùng một ảnh và hiển thị Top-3, confidence, mức độ đồng thuận. Khi hai model bất đồng, ứng dụng ẩn hướng xử lý để tránh khuyến nghị dựa trên kết luận mâu thuẫn.
+
+> Hiện tại `best_model.keras` và `best_model.h5` là hai định dạng model đang có trong repository; chưa có bằng chứng chúng là hai lần huấn luyện độc lập. Muốn so sánh phiên bản thực sự, hãy thêm model thứ hai được huấn luyện độc lập vào `model/` và đặt tên khác. Không đánh giá model chỉ bằng một ảnh.
+
+### Đánh giá trên ảnh thực tế có nhãn
+
+[**Mở notebook so sánh model trên tập ảnh thực tế**](https://colab.research.google.com/github/ShimeKano/Plant-Disease-Detection/blob/main/notebooks/testing/compare_models_on_labeled_dataset.ipynb)
+
+Upload ZIP ảnh được sắp xếp theo thư mục class (tên thư mục khớp `model/class_names.json`). Notebook chạy tất cả model trên cùng ảnh, tính Accuracy, Macro Precision/Recall/F1, Weighted F1, classification report và confusion matrix. Ảnh phải được gán nhãn đúng, không trùng tập train và nên được xác nhận bởi người có chuyên môn. Không có nhãn thật thì không thể tính accuracy.
+
 ## Kiểm thử ứng dụng trên Google Colab
 
 [**Mở notebook kiểm thử Streamlit**](https://colab.research.google.com/github/ShimeKano/Plant-Disease-Detection/blob/main/notebooks/testing/test_streamlit_colab.ipynb)

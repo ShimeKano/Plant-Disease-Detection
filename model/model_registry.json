@@ -1,0 +1,17 @@
+{
+  "models": [
+    {
+      "file": "best_model.keras",
+      "label": "Primary model (Keras)",
+      "status": "present",
+      "training_run": "unknown"
+    },
+    {
+      "file": "best_model.h5",
+      "label": "Legacy-format model (HDF5)",
+      "status": "present",
+      "training_run": "unknown"
+    }
+  ],
+  "note": "The two files have not been verified as independently trained models. The Streamlit app discovers .keras and .h5 files automatically. Add separately trained model files here for meaningful A/B comparison."
+}
